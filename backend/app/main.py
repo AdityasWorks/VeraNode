@@ -16,6 +16,36 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup and shutdown events."""
+    # Startup
+    logger.info("Starting VeraNode API...")
+    logger.info(f"Environment: {'Development' if settings.DEBUG else 'Production'}")
+    
+    # Create necessary directories
+    import os
+    os.makedirs(settings.EZKL_MODELS_DIR, exist_ok=True)
+    os.makedirs(settings.EZKL_PROOFS_DIR, exist_ok=True)
+    
+    # Test database connection
+    try:
+        from app.database.session import engine
+        from sqlalchemy.sql import text
+        async with engine.begin() as conn:
+            await conn.execute(text("SELECT 1"))
+        logger.info("✅ Database connection successful")
+    except Exception as e:
+        logger.error(f"❌ Database connection failed: {e}")
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down VeraNode API...")
+    from app.database.session import engine
+    await engine.dispose()
+
+
 # Create FastAPI application
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -24,13 +54,13 @@ app = FastAPI(
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
     openapi_url=f"{settings.API_V1_PREFIX}/openapi.json",
-    # lifespan=lifespan,
+    lifespan=lifespan,
 )
 
 # Security Middleware - GZip compression
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-# Session middleware (needed for OAuth later)
+# Session middleware (if needed for OAuth later)
 if not settings.DEBUG:
     app.add_middleware(
         SessionMiddleware,
@@ -116,7 +146,7 @@ async def health_check():
     except Exception as e:
         db_status = f"unhealthy: {str(e)}"
         logger.error(f"Health check DB error: {e}")
-
+    
     return {
         "status": "healthy" if db_status == "healthy" else "degraded",
         "database": db_status,

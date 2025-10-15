@@ -70,5 +70,11 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
 
+    # ZKML Settings
+    EZKL_MODELS_DIR: str = "./data/models"
+    EZKL_PROOFS_DIR: str = "./data/proofs"
+    EZKL_MAX_MODEL_SIZE_MB: int = 100
+
+
 # Create global settings instance
 settings = Settings()
