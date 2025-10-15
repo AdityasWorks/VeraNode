@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     # API Key Settings
     API_KEY_HEADER: str = "X-API-Key"
 
+    # Logging
+    LOG_LEVEL: str = "INFO"
+
 
 # Create global settings instance
 settings = Settings()

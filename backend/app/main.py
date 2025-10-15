@@ -8,7 +8,12 @@ from starlette.middleware.sessions import SessionMiddleware
 import logging
 
 from app.core.config import settings
+from app.core.logging import setup_logging
 from app.api.v1.router import api_router
+
+# Setup logging
+setup_logging()
+logger = logging.getLogger(__name__)
 
 
 # Create FastAPI application
@@ -110,6 +115,8 @@ async def health_check():
         db_status = "healthy"
     except Exception as e:
         db_status = f"unhealthy: {str(e)}"
+        logger.error(f"Health check DB error: {e}")
+
     return {
         "status": "healthy" if db_status == "healthy" else "degraded",
         "database": db_status,
@@ -121,6 +128,7 @@ async def health_check():
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
     """Global exception handler for unhandled errors."""
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
     return JSONResponse(
         status_code=500,
         content={
