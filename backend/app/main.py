@@ -90,6 +90,8 @@ if not settings.DEBUG:
     )
 
 
+
+
 # Security Headers Middleware
 @app.middleware("http")
 async def add_security_headers(request, call_next):
@@ -116,6 +118,44 @@ async def add_security_headers(request, call_next):
     
     return response
 
+
+# Rate limiting middleware (simple implementation)
+from collections import defaultdict
+from datetime import datetime, timedelta
+import asyncio
+
+rate_limit_storage = defaultdict(list)
+rate_limit_lock = asyncio.Lock()
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request, call_next):
+    """Simple rate limiting: 100 requests per minute per IP."""
+    if not settings.RATE_LIMIT_ENABLED:
+        return await call_next(request)
+    
+    client_ip = request.client.host
+    now = datetime.utcnow()
+    
+    async with rate_limit_lock:
+        # Clean old requests
+        rate_limit_storage[client_ip] = [
+            req_time for req_time in rate_limit_storage[client_ip]
+            if now - req_time < timedelta(minutes=1)
+        ]
+        
+        # Check limit
+        if len(rate_limit_storage[client_ip]) >= settings.RATE_LIMIT_PER_MINUTE:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many requests. Please slow down."},
+                headers={"Retry-After": "60"}
+            )
+        
+        # Add current request
+        rate_limit_storage[client_ip].append(now)
+    
+    return await call_next(request)
 
 
 # Root endpoint

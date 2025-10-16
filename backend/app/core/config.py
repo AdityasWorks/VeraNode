@@ -75,6 +75,15 @@ class Settings(BaseSettings):
     EZKL_PROOFS_DIR: str = "./data/proofs"
     EZKL_MAX_MODEL_SIZE_MB: int = 100
 
+    # Redis/Celery Settings
+    REDIS_URL: str = "redis://localhost:6379/0"
+    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
+    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
+
+
+    # Rate Limiting
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_PER_MINUTE: int = 60
 
 # Create global settings instance
 settings = Settings()

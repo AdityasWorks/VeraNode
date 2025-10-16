@@ -24,15 +24,20 @@ docker run --name veranode-postgres \
   -d postgres:16-alpine
 ```
 
-4. migrate db using alembic
+4. start a redis container using docker
 ```
-alembic revision --autogenerate -m 'any msg'
-
-alembic upgrade head
+docker run -d --name veranode-redis -p 6379:6379 redis:7-alpine
 ```
 
-5. run fastAPI server
+5. run celery
+```
+celery -A app.workers.celery_app worker --loglevel=info --pool=prefork
+```
+
+6. run fastAPI server in a different terminal
 
 ```
+source venv/bin/activate
+
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
