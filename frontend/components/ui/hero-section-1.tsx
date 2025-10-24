@@ -1,9 +1,13 @@
-import React from 'react'
+"use client";
+
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { ArrowRight, ChevronRight, Menu, X } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { ArrowRight, ChevronRight, Menu, X, LogOut, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AnimatedGroup } from '@/components/ui/animated-group'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/store/authStore'
 
 const transitionVariants = {
     item: {
@@ -26,6 +30,21 @@ const transitionVariants = {
 }
 
 export function HeroSection() {
+    const router = useRouter()
+    const { isAuthenticated, checkAuth } = useAuthStore()
+
+    useEffect(() => {
+        checkAuth()
+    }, [checkAuth])
+
+    const handleGetStarted = () => {
+        if (isAuthenticated) {
+            router.push('/dashboard')
+        } else {
+            router.push('/auth')
+        }
+    }
+
     return (
         <>
             <HeroHeader />
@@ -122,12 +141,12 @@ export function HeroSection() {
                                         key={1}
                                         className="bg-foreground/10 rounded-[14px] border p-0.5">
                                         <Button
-                                            asChild
                                             size="lg"
+                                            onClick={handleGetStarted}
                                             className="rounded-xl px-5 text-base">
-                                            <Link href="/auth">
-                                                <span className="text-nowrap">Get Started</span>
-                                            </Link>
+                                            <span className="text-nowrap">
+                                                {isAuthenticated ? 'Go to Dashboard' : 'Get Started'}
+                                            </span>
                                         </Button>
                                     </div>
                                     <Button
@@ -285,6 +304,8 @@ const menuItems = [
 const HeroHeader = () => {
     const [menuState, setMenuState] = React.useState(false)
     const [isScrolled, setIsScrolled] = React.useState(false)
+    const router = useRouter()
+    const { isAuthenticated, user, logout } = useAuthStore()
 
     React.useEffect(() => {
         const handleScroll = () => {
@@ -293,6 +314,19 @@ const HeroHeader = () => {
         window.addEventListener('scroll', handleScroll)
         return () => window.removeEventListener('scroll', handleScroll)
     }, [])
+
+    const handleLogout = async () => {
+        await logout()
+        router.push('/')
+    }
+
+    const handleSignIn = () => {
+        router.push('/auth')
+    }
+
+    const handleDashboard = () => {
+        router.push('/dashboard')
+    }
     return (
         <header>
             <nav
@@ -346,31 +380,54 @@ const HeroHeader = () => {
                                 </ul>
                             </div>
                             <div className="flex w-full flex-col space-y-3 sm:flex-row sm:gap-3 sm:space-y-0 md:w-fit">
-                                <Button
-                                    asChild
-                                    variant="outline"
-                                    size="sm"
-                                    className={cn(isScrolled && 'lg:hidden')}>
-                                    <Link href="/auth">
-                                        <span>Login</span>
-                                    </Link>
-                                </Button>
-                                <Button
-                                    asChild
-                                    size="sm"
-                                    className={cn(isScrolled && 'lg:hidden')}>
-                                    <Link href="/auth">
-                                        <span>Sign Up</span>
-                                    </Link>
-                                </Button>
-                                <Button
-                                    asChild
-                                    size="sm"
-                                    className={cn(isScrolled ? 'lg:inline-flex' : 'hidden')}>
-                                    <Link href="/auth">
-                                        <span>Get Started</span>
-                                    </Link>
-                                </Button>
+                                {isAuthenticated ? (
+                                    <>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={handleDashboard}
+                                            className={cn(isScrolled && 'lg:hidden')}>
+                                            <User className="size-4 mr-2" />
+                                            <span>{user?.username || 'Dashboard'}</span>
+                                        </Button>
+                                        <Button
+                                            variant="destructive"
+                                            size="sm"
+                                            onClick={handleLogout}
+                                            className={cn(isScrolled && 'lg:hidden')}>
+                                            <LogOut className="size-4 mr-2" />
+                                            <span>Logout</span>
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            onClick={handleDashboard}
+                                            className={cn(isScrolled ? 'lg:inline-flex' : 'hidden')}>
+                                            <span>Dashboard</span>
+                                        </Button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={handleSignIn}
+                                            className={cn(isScrolled && 'lg:hidden')}>
+                                            <span>Login</span>
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            onClick={handleSignIn}
+                                            className={cn(isScrolled && 'lg:hidden')}>
+                                            <span>Sign Up</span>
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            onClick={handleSignIn}
+                                            className={cn(isScrolled ? 'lg:inline-flex' : 'hidden')}>
+                                            <span>Get Started</span>
+                                        </Button>
+                                    </>
+                                )}
                             </div>
                         </div>
                     </div>
