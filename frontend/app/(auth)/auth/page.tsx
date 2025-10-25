@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
+import { useToast } from "@/components/ui/toast-provider";
 import { AuthUI } from "@/components/ui/auth-fuse";
 import { UserRole } from "@/types/auth";
 
@@ -24,6 +25,7 @@ interface ApiError {
 export default function AuthPage() {
   const router = useRouter();
   const { login, register, user, isLoading } = useAuthStore();
+  const { showToast } = useToast();
   const [error, setError] = useState<string>("");
 
   useEffect(() => {
@@ -37,6 +39,8 @@ export default function AuthPage() {
       setError("");
       
       await login({ email: data.email, password: data.password });
+      
+      showToast("Welcome back! Redirecting to dashboard...", "success");
       
       // Use replace to avoid back button issues
       setTimeout(() => {
@@ -63,7 +67,7 @@ export default function AuthPage() {
       }
       
       setError(errorMsg);
-      alert(`Login Error: ${errorMsg}`);
+      showToast(errorMsg, "error");
     }
   };
 
@@ -78,7 +82,7 @@ export default function AuthPage() {
         role: (data.role || "USER") as UserRole,
       });
       
-      alert("Account created successfully! You are now logged in.");
+      showToast("Account created successfully! You are now logged in.", "success");
       
       // Use replace to avoid back button issues
       setTimeout(() => {
@@ -110,7 +114,7 @@ export default function AuthPage() {
       }
       
       setError(errorMsg);
-      alert(`Registration Error: ${errorMsg}`);
+      showToast(errorMsg, "error");
     }
   };
 

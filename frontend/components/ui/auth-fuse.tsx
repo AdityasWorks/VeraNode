@@ -188,13 +188,35 @@ interface SignInFormProps {
 }
 
 function SignInForm({ onSubmit, isLoading }: SignInFormProps) {
+  const [validationErrors, setValidationErrors] = useState<{email?: string; password?: string}>({});
+  
   const handleSignIn = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    
+    // Clear previous errors
+    setValidationErrors({});
+    
     const formData = new FormData(event.currentTarget);
-    onSubmit({
-      email: formData.get('email') as string,
-      password: formData.get('password') as string,
-    });
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
+    
+    // Client-side validation
+    const errors: {email?: string; password?: string} = {};
+    
+    if (!email || !email.includes('@')) {
+      errors.email = 'Please enter a valid email address';
+    }
+    
+    if (!password || password.length < 6) {
+      errors.password = 'Password must be at least 6 characters';
+    }
+    
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+    
+    onSubmit({ email, password });
   };
 
   return (
@@ -206,10 +228,43 @@ function SignInForm({ onSubmit, isLoading }: SignInFormProps) {
       <div className="grid gap-4">
         <div className="grid gap-2">
           <Label htmlFor="email">Email</Label>
-          <Input id="email" name="email" type="email" placeholder="m@example.com" required autoComplete="email" />
+          <Input 
+            id="email" 
+            name="email" 
+            type="email" 
+            placeholder="m@example.com" 
+            required 
+            autoComplete="email"
+            aria-label="Email address"
+            aria-invalid={!!validationErrors.email}
+            aria-describedby={validationErrors.email ? "email-error" : undefined}
+            className={validationErrors.email ? "border-red-500" : ""}
+          />
+          {validationErrors.email && (
+            <p id="email-error" className="text-xs text-red-500" role="alert">
+              {validationErrors.email}
+            </p>
+          )}
         </div>
-        <PasswordInput name="password" label="Password" required autoComplete="current-password" placeholder="Password" />
-        <Button type="submit" variant="outline" className="mt-2" disabled={isLoading}>
+        <div className="grid gap-2">
+          <PasswordInput 
+            name="password" 
+            label="Password" 
+            required 
+            autoComplete="current-password" 
+            placeholder="Password"
+            aria-label="Password"
+            aria-invalid={!!validationErrors.password}
+            aria-describedby={validationErrors.password ? "password-error" : undefined}
+            className={validationErrors.password ? "border-red-500" : ""}
+          />
+          {validationErrors.password && (
+            <p id="password-error" className="text-xs text-red-500" role="alert">
+              {validationErrors.password}
+            </p>
+          )}
+        </div>
+        <Button type="submit" variant="outline" className="mt-2" disabled={isLoading} aria-busy={isLoading}>
           {isLoading ? 'Signing in...' : 'Sign In'}
         </Button>
       </div>
@@ -224,15 +279,41 @@ interface SignUpFormProps {
 }
 
 function SignUpForm({ onSubmit, isLoading, showRole = false }: SignUpFormProps) {
+  const [validationErrors, setValidationErrors] = useState<{name?: string; email?: string; password?: string}>({});
+  
   const handleSignUp = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    
+    // Clear previous errors
+    setValidationErrors({});
+    
     const formData = new FormData(event.currentTarget);
-    onSubmit({
-      name: formData.get('name') as string,
-      email: formData.get('email') as string,
-      password: formData.get('password') as string,
-      role: formData.get('role') as string,
-    });
+    const name = formData.get('name') as string;
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
+    const role = formData.get('role') as string;
+    
+    // Client-side validation
+    const errors: {name?: string; email?: string; password?: string} = {};
+    
+    if (!name || name.trim().length < 2) {
+      errors.name = 'Name must be at least 2 characters';
+    }
+    
+    if (!email || !email.includes('@')) {
+      errors.email = 'Please enter a valid email address';
+    }
+    
+    if (!password || password.length < 8) {
+      errors.password = 'Password must be at least 8 characters';
+    }
+    
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+    
+    onSubmit({ name, email, password, role });
   };
 
   return (
@@ -244,11 +325,43 @@ function SignUpForm({ onSubmit, isLoading, showRole = false }: SignUpFormProps) 
       <div className="grid gap-4">
         <div className="grid gap-1">
           <Label htmlFor="name">Full Name</Label>
-          <Input id="name" name="name" type="text" placeholder="John Doe" required autoComplete="name" />
+          <Input 
+            id="name" 
+            name="name" 
+            type="text" 
+            placeholder="John Doe" 
+            required 
+            autoComplete="name"
+            aria-label="Full name"
+            aria-invalid={!!validationErrors.name}
+            aria-describedby={validationErrors.name ? "name-error" : undefined}
+            className={validationErrors.name ? "border-red-500" : ""}
+          />
+          {validationErrors.name && (
+            <p id="name-error" className="text-xs text-red-500" role="alert">
+              {validationErrors.name}
+            </p>
+          )}
         </div>
         <div className="grid gap-2">
           <Label htmlFor="email">Email</Label>
-          <Input id="email" name="email" type="email" placeholder="m@example.com" required autoComplete="email" />
+          <Input 
+            id="email" 
+            name="email" 
+            type="email" 
+            placeholder="m@example.com" 
+            required 
+            autoComplete="email"
+            aria-label="Email address"
+            aria-invalid={!!validationErrors.email}
+            aria-describedby={validationErrors.email ? "email-error" : undefined}
+            className={validationErrors.email ? "border-red-500" : ""}
+          />
+          {validationErrors.email && (
+            <p id="email-error" className="text-xs text-red-500" role="alert">
+              {validationErrors.email}
+            </p>
+          )}
         </div>
         {showRole && (
           <div className="grid gap-2">
@@ -256,6 +369,7 @@ function SignUpForm({ onSubmit, isLoading, showRole = false }: SignUpFormProps) 
             <select
               id="role"
               name="role"
+              aria-label="Account type"
               className="flex h-10 w-full rounded-lg border border-input dark:border-input/50 bg-white dark:bg-zinc-900 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 shadow-sm shadow-black/5 transition-shadow focus-visible:bg-white dark:focus-visible:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 dark:focus-visible:ring-zinc-300 disabled:cursor-not-allowed disabled:opacity-50"
               defaultValue="USER"
             >
@@ -265,8 +379,25 @@ function SignUpForm({ onSubmit, isLoading, showRole = false }: SignUpFormProps) 
             </select>
           </div>
         )}
-        <PasswordInput name="password" label="Password" required autoComplete="new-password" placeholder="Password"/>
-        <Button type="submit" variant="outline" className="mt-2" disabled={isLoading}>
+        <div className="grid gap-2">
+          <PasswordInput 
+            name="password" 
+            label="Password" 
+            required 
+            autoComplete="new-password" 
+            placeholder="Password"
+            aria-label="Password (minimum 8 characters)"
+            aria-invalid={!!validationErrors.password}
+            aria-describedby={validationErrors.password ? "password-error" : undefined}
+            className={validationErrors.password ? "border-red-500" : ""}
+          />
+          {validationErrors.password && (
+            <p id="password-error" className="text-xs text-red-500" role="alert">
+              {validationErrors.password}
+            </p>
+          )}
+        </div>
+        <Button type="submit" variant="outline" className="mt-2" disabled={isLoading} aria-busy={isLoading}>
           {isLoading ? 'Creating account...' : 'Sign Up'}
         </Button>
       </div>

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
+import { useToast } from "@/components/ui/toast-provider";
 import { motion } from "framer-motion";
 import {
   Database,
@@ -49,7 +50,13 @@ const sampleCta = {
   buttonText: "View All Jobs",
   onButtonClick: () => {
     // TODO: Navigate to full jobs list
-    alert("Full proof jobs list coming soon!");
+    // For now, show a toast notification
+    if (typeof window !== 'undefined') {
+      const event = new CustomEvent('show-toast', { 
+        detail: { message: 'Full proof jobs list feature coming soon!', type: 'info' } 
+      });
+      window.dispatchEvent(event);
+    }
   },
 };
 
@@ -58,7 +65,7 @@ const sampleProofJobs = [
   {
     id: "1",
     name: "ResNet50 Inference",
-    email: "model@zkml.io",
+    email: "resnet.user@zkml.io",
     source: "ORGANIC",
     sourceType: "organic" as const,
     status: "closing" as const,
@@ -70,7 +77,7 @@ const sampleProofJobs = [
   {
     id: "2",
     name: "GPT-2 Generation",
-    email: "model@zkml.io",
+    email: "gpt2.user@zkml.io",
     source: "BATCH-24",
     sourceType: "campaign" as const,
     status: "closed" as const,
@@ -82,7 +89,7 @@ const sampleProofJobs = [
   {
     id: "3",
     name: "BERT Classification",
-    email: "model@zkml.io",
+    email: "bert.classifier@zkml.io",
     source: "API-REQ",
     sourceType: "campaign" as const,
     status: "lost" as const,
@@ -94,7 +101,7 @@ const sampleProofJobs = [
   {
     id: "4",
     name: "VGG16 Detection",
-    email: "model@zkml.io",
+    email: "vgg16.detector@zkml.io",
     source: "SCHEDULED",
     sourceType: "campaign" as const,
     status: "pre-sale" as const,
@@ -106,7 +113,7 @@ const sampleProofJobs = [
   {
     id: "5",
     name: "MobileNet Inference",
-    email: "model@zkml.io",
+    email: "mobilenet.user@zkml.io",
     source: "ORGANIC",
     sourceType: "organic" as const,
     status: "lost" as const,
@@ -120,6 +127,7 @@ const sampleProofJobs = [
 export default function DashboardPage() {
   const router = useRouter();
   const { user, isAuthenticated, logout, checkAuth } = useAuthStore();
+  const { showToast } = useToast();
 
   useEffect(() => {
     checkAuth();
@@ -144,7 +152,7 @@ export default function DashboardPage() {
       description: "Upload a new AI model for verification",
       onClick: () => {
         // TODO: Implement model registration
-        alert("Model registration coming soon!");
+        showToast("Model registration feature coming soon!", "info");
       },
     },
     {
@@ -153,7 +161,7 @@ export default function DashboardPage() {
       description: "Create zkML proof for your model",
       onClick: () => {
         // TODO: Implement proof generation
-        alert("Proof generation coming soon!");
+        showToast("Proof generation feature coming soon!", "info");
       },
     },
     {
@@ -162,7 +170,7 @@ export default function DashboardPage() {
       description: "Validate existing cryptographic proofs",
       onClick: () => {
         // TODO: Implement proof verification
-        alert("Proof verification coming soon!");
+        showToast("Proof verification feature coming soon!", "info");
       },
     },
   ];
@@ -366,7 +374,7 @@ export default function DashboardPage() {
                 leads={sampleProofJobs}
                 onLeadAction={(leadId, action) => {
                   // TODO: Implement proof job action handlers
-                  alert(`${action} action for proof job ${leadId} coming soon!`);
+                  showToast(`${action} action for proof job ${leadId} - Feature coming soon!`, "info");
                 }}
               />
             </div>
