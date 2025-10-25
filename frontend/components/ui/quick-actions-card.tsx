@@ -39,7 +39,7 @@ export const QuickLinksCard = React.forwardRef<HTMLDivElement, QuickLinksCardPro
       visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
     };
 
-    const hoverTransition = { type: "spring", stiffness: 300, damping: 15 };
+    const hoverTransition = { type: "spring" as const, stiffness: 300, damping: 15 };
 
     return (
       <motion.div
