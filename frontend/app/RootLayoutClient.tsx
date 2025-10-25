@@ -3,6 +3,8 @@
 import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ToastProvider } from "@/components/ui/toast-provider";
 
 export default function RootLayoutClient({
   children,
@@ -26,5 +28,11 @@ export default function RootLayoutClient({
     }
   }, [pathname, router]);
 
-  return <>{children}</>;
+  return (
+    <ErrorBoundary>
+      <ToastProvider>
+        {children}
+      </ToastProvider>
+    </ErrorBoundary>
+  );
 }
