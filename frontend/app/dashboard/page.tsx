@@ -47,7 +47,10 @@ const sampleTeam = {
 const sampleCta = {
   text: "Monitor all proof generation activities in real-time",
   buttonText: "View All Jobs",
-  onButtonClick: () => console.log("View All Jobs clicked"),
+  onButtonClick: () => {
+    // TODO: Navigate to full jobs list
+    alert("Full proof jobs list coming soon!");
+  },
 };
 
 // Sample proof jobs data (adapted from leads structure)
@@ -139,19 +142,28 @@ export default function DashboardPage() {
       icon: <ClipboardList className="h-full w-full text-foreground/90" />,
       label: "Register Model",
       description: "Upload a new AI model for verification",
-      onClick: () => console.log("Register Model action"),
+      onClick: () => {
+        // TODO: Implement model registration
+        alert("Model registration coming soon!");
+      },
     },
     {
       icon: <ArrowUpRightFromSquare className="h-full w-full text-foreground/90" />,
       label: "Generate Proof",
       description: "Create zkML proof for your model",
-      onClick: () => console.log("Generate Proof action"),
+      onClick: () => {
+        // TODO: Implement proof generation
+        alert("Proof generation coming soon!");
+      },
     },
     {
       icon: <ArrowDownLeftFromSquare className="h-full w-full text-foreground/90" />,
       label: "Verify Proof",
       description: "Validate existing cryptographic proofs",
-      onClick: () => console.log("Verify Proof action"),
+      onClick: () => {
+        // TODO: Implement proof verification
+        alert("Proof verification coming soon!");
+      },
     },
   ];
 
@@ -322,7 +334,9 @@ export default function DashboardPage() {
                   teamActivities={sampleTeamActivities}
                   team={sampleTeam}
                   cta={sampleCta}
-                  onFilterClick={() => console.log("Filter clicked")}
+                  onFilterClick={() => {
+                    // TODO: Implement filter functionality
+                  }}
                   className="bg-card/70 backdrop-blur-sm border-border/50"
                 />
               </div>
@@ -350,9 +364,10 @@ export default function DashboardPage() {
               </div>
               <LeadsTable
                 leads={sampleProofJobs}
-                onLeadAction={(leadId, action) =>
-                  console.log(`Action ${action} on proof job ${leadId}`)
-                }
+                onLeadAction={(leadId, action) => {
+                  // TODO: Implement proof job action handlers
+                  alert(`${action} action for proof job ${leadId} coming soon!`);
+                }}
               />
             </div>
           </motion.div>

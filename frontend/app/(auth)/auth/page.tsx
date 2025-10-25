@@ -4,6 +4,22 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import { AuthUI } from "@/components/ui/auth-fuse";
+import { UserRole } from "@/types/auth";
+
+interface ApiErrorDetail {
+  msg?: string;
+  message?: string;
+}
+
+interface ApiError {
+  response?: {
+    data?: {
+      detail?: string | ApiErrorDetail[];
+      message?: string;
+    } | string;
+  };
+  message?: string;
+}
 
 export default function AuthPage() {
   const router = useRouter();
@@ -19,40 +35,33 @@ export default function AuthPage() {
   const handleSignIn = async (data: { email: string; password: string }) => {
     try {
       setError("");
-      console.log("=== LOGIN ATTEMPT ===");
-      console.log("Email:", data.email);
-      console.log("API URL:", process.env.NEXT_PUBLIC_API_URL);
       
       await login({ email: data.email, password: data.password });
-      
-      console.log("=== LOGIN SUCCESS ===");
-      console.log("User:", user);
       
       // Use replace to avoid back button issues
       setTimeout(() => {
         router.replace("/dashboard");
       }, 100);
-    } catch (error: any) {
-      console.error("=== LOGIN ERROR ===");
-      console.error("Full error:", error);
+    } catch (err: unknown) {
+      const error = err as ApiError;
       
       // Extract proper error message
       let errorMsg = "Failed to sign in. Please check your credentials.";
       
       if (error?.response?.data) {
+        const data = error.response.data;
         // Backend returned structured error
-        if (typeof error.response.data === 'string') {
-          errorMsg = error.response.data;
-        } else if (error.response.data.detail) {
-          errorMsg = error.response.data.detail;
-        } else if (error.response.data.message) {
-          errorMsg = error.response.data.message;
+        if (typeof data === 'string') {
+          errorMsg = data;
+        } else if (data.detail) {
+          errorMsg = typeof data.detail === 'string' ? data.detail : data.detail.toString();
+        } else if (data.message) {
+          errorMsg = data.message;
         }
       } else if (error?.message && typeof error.message === 'string') {
         errorMsg = error.message;
       }
       
-      console.error("Extracted error message:", errorMsg);
       setError(errorMsg);
       alert(`Login Error: ${errorMsg}`);
     }
@@ -61,50 +70,45 @@ export default function AuthPage() {
   const handleSignUp = async (data: { name: string; email: string; password: string; role?: string }) => {
     try {
       setError("");
-      console.log("=== REGISTRATION ATTEMPT ===");
-      console.log("Data:", { name: data.name, email: data.email, role: data.role });
-      console.log("API URL:", process.env.NEXT_PUBLIC_API_URL);
       
       await register({
         username: data.name,
         email: data.email,
         password: data.password,
-        role: (data.role || "USER") as any,
+        role: (data.role || "USER") as UserRole,
       });
       
-      console.log("=== REGISTRATION SUCCESS ===");
       alert("Account created successfully! You are now logged in.");
       
       // Use replace to avoid back button issues
       setTimeout(() => {
         router.replace("/dashboard");
       }, 100);
-    } catch (error: any) {
-      console.error("=== REGISTRATION ERROR ===");
-      console.error("Full error:", error);
+    } catch (err: unknown) {
+      const error = err as ApiError;
       
       // Extract proper error message
       let errorMsg = "Failed to create account. Please try again.";
       
       if (error?.response?.data) {
+        const data = error.response.data;
         // Backend returned structured error
-        if (typeof error.response.data === 'string') {
-          errorMsg = error.response.data;
-        } else if (error.response.data.detail) {
+        if (typeof data === 'string') {
+          errorMsg = data;
+        } else if (data.detail) {
           // Handle both string and array formats
-          if (Array.isArray(error.response.data.detail)) {
-            errorMsg = error.response.data.detail.map((e: any) => e.msg || e).join(', ');
+          if (Array.isArray(data.detail)) {
+            errorMsg = data.detail.map((e: ApiErrorDetail) => e.msg || e.message || '').join(', ');
           } else {
-            errorMsg = error.response.data.detail;
+            errorMsg = data.detail;
           }
-        } else if (error.response.data.message) {
-          errorMsg = error.response.data.message;
+        } else if (data.message) {
+          errorMsg = data.message;
         }
       } else if (error?.message && typeof error.message === 'string') {
         errorMsg = error.message;
       }
       
-      console.error("Extracted error message:", errorMsg);
       setError(errorMsg);
       alert(`Registration Error: ${errorMsg}`);
     }
