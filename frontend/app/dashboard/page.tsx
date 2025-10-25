@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import { useToast } from "@/components/ui/toast-provider";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Database,
   Clock,
@@ -23,6 +23,8 @@ import { LeadsTable } from "@/components/ui/leads-data-table";
 import { QuickLinksCard } from "@/components/ui/quick-actions-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BeamsBackground } from "@/components/ui/beams-background";
+import { ModelsTable, type Model } from "@/components/ui/models-data-table";
+import { ProofJobsTable, type ProofJob } from "@/components/ui/proof-jobs-table";
 
 // Sample data for the Marketing Dashboard (Team Activities)
 const sampleTeamActivities = {
@@ -126,8 +128,20 @@ const sampleProofJobs = [
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, isAuthenticated, logout, checkAuth } = useAuthStore();
+  const { user, isAuthenticated, logout, checkAuth, accessToken } = useAuthStore();
   const { showToast } = useToast();
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [modelName, setModelName] = useState("");
+  const [modelType, setModelType] = useState<'onnx' | 'pytorch' | 'tensorflow'>('onnx');
+  const [description, setDescription] = useState("");
+  const [myModels, setMyModels] = useState<Model[]>([]);
+  const [loadingModels, setLoadingModels] = useState(true);
+  const [generatingProof, setGeneratingProof] = useState<number | null>(null);
+  const [proofJobs, setProofJobs] = useState<ProofJob[]>([]);
+  const [loadingJobs, setLoadingJobs] = useState(true);
+  const [activeProofsByModel, setActiveProofsByModel] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     checkAuth();
@@ -144,6 +158,210 @@ export default function DashboardPage() {
     router.replace("/auth");
   };
 
+  const handleUploadModel = async () => {
+    if (!uploadFile || !modelName || !accessToken) {
+      showToast("Please fill in all required fields", "error");
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', uploadFile);
+
+      const response = await fetch(
+        `http://localhost:8000/api/v1/models/register?name=${encodeURIComponent(modelName)}&model_type=${modelType}&version=1.0.0&description=${encodeURIComponent(description || '')}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          },
+          body: formData,
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        
+        // Handle duplicate model error specifically
+        if (error.detail?.includes("already exists")) {
+          showToast(`Model "${modelName}" already exists. Try a different name or version.`, "error");
+        } else {
+          showToast(error.detail || 'Upload failed', "error");
+        }
+        setUploading(false);
+        return;
+      }
+
+      const model = await response.json();
+      showToast(`✓ Model "${modelName}" uploaded successfully!`, "success");
+      
+      // Reset form and refresh model list
+      setShowUploadModal(false);
+      setUploadFile(null);
+      setModelName("");
+      setDescription("");
+      setModelType('onnx');
+      
+      // Reload models list
+      await fetchMyModels();
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      showToast(error.message || "Failed to upload model", "error");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setUploadFile(file);
+      if (!modelName) {
+        setModelName(file.name.replace(/\.[^/.]+$/, ''));
+      }
+    }
+  };
+
+  // Fetch user's models
+  const fetchMyModels = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/models/my-models', {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setMyModels(data.models || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch models:', error);
+    } finally {
+      setLoadingModels(false);
+    }
+  };
+
+  // Fetch user's proof jobs
+  const fetchProofJobs = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/verification/my-proofs', {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      });
+
+      if (response.ok) {
+        const jobs: ProofJob[] = await response.json();
+        
+        // Enrich jobs with model names
+        const enrichedJobs = await Promise.all(
+          jobs.map(async (job) => {
+            const model = myModels.find(m => m.id === job.model_id);
+            return {
+              ...job,
+              model_name: model?.name || `Model #${job.model_id}`,
+            };
+          })
+        );
+        
+        setProofJobs(enrichedJobs);
+        
+        // Track which models have active proofs
+        const activeModels = new Set<number>();
+        enrichedJobs.forEach(job => {
+          if (job.status === "PENDING" || job.status === "PROCESSING") {
+            activeModels.add(job.model_id);
+          }
+        });
+        setActiveProofsByModel(activeModels);
+      }
+    } catch (error) {
+      console.error('Failed to fetch proof jobs:', error);
+    } finally {
+      setLoadingJobs(false);
+    }
+  };
+
+  // Combined fetch function
+  const fetchAllData = async () => {
+    await fetchMyModels();
+    await fetchProofJobs();
+  };
+
+  // Generate proof for a model
+  const handleGenerateProof = async (modelId: number) => {
+    // Check if model already has an active proof
+    if (activeProofsByModel.has(modelId)) {
+      showToast("This model already has a proof job in progress", "error");
+      return;
+    }
+
+    setGeneratingProof(modelId);
+    try {
+      // For now, use dummy input data - in production this should be collected from user
+      const proofData = {
+        model_id: modelId,
+        input_data: {
+          dummy: true,
+          note: "Sample input for proof generation"
+        }
+      };
+
+      const response = await fetch(`http://localhost:8000/api/v1/verification/generate-proof`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(proofData),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Proof generation failed');
+      }
+
+      const result = await response.json();
+      showToast(`✓ Proof generation started! Job ID: ${result.id}`, "success");
+      
+      // Refresh data immediately
+      await fetchAllData();
+      
+    } catch (error: any) {
+      console.error('Proof generation error:', error);
+      showToast(error.message || "Failed to generate proof", "error");
+    } finally {
+      setGeneratingProof(null);
+    }
+  };
+
+  // Load models on mount
+  useEffect(() => {
+    if (isAuthenticated && accessToken) {
+      fetchAllData();
+    }
+  }, [isAuthenticated, accessToken]);
+
+  // Set up polling for real-time updates (every 5 seconds)
+  useEffect(() => {
+    if (!isAuthenticated || !accessToken) return;
+
+    const pollInterval = setInterval(() => {
+      // Only poll if there are active proof jobs
+      const hasActiveJobs = proofJobs.some(
+        job => job.status === "PENDING" || job.status === "PROCESSING"
+      );
+      
+      if (hasActiveJobs) {
+        fetchProofJobs();
+      }
+    }, 5000); // Poll every 5 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [isAuthenticated, accessToken, proofJobs]);
+
   // Quick actions configuration with descriptions
   const quickActions = [
     {
@@ -151,26 +369,15 @@ export default function DashboardPage() {
       label: "Register Model",
       description: "Upload a new AI model for verification",
       onClick: () => {
-        // TODO: Implement model registration
-        showToast("Model registration feature coming soon!", "info");
-      },
-    },
-    {
-      icon: <ArrowUpRightFromSquare className="h-full w-full text-foreground/90" />,
-      label: "Generate Proof",
-      description: "Create zkML proof for your model",
-      onClick: () => {
-        // TODO: Implement proof generation
-        showToast("Proof generation feature coming soon!", "info");
+        setShowUploadModal(true);
       },
     },
     {
       icon: <ArrowDownLeftFromSquare className="h-full w-full text-foreground/90" />,
-      label: "Verify Proof",
-      description: "Validate existing cryptographic proofs",
+      label: "View Jobs",
+      description: "Check proof generation status",
       onClick: () => {
-        // TODO: Implement proof verification
-        showToast("Proof verification feature coming soon!", "info");
+        showToast("Viewing your proof jobs below", "info");
       },
     },
   ];
@@ -215,7 +422,14 @@ export default function DashboardPage() {
   };
 
   return (
-    <BeamsBackground intensity="subtle" className="min-h-screen">
+    <div className="min-h-screen bg-background relative">
+      {/* Background with fixed positioning */}
+      <div className="fixed inset-0 pointer-events-none">
+        <BeamsBackground intensity="subtle" className="h-full w-full" />
+      </div>
+
+      {/* Content wrapper */}
+      <div className="relative z-10">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
@@ -272,9 +486,11 @@ export default function DashboardPage() {
                   <Database className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">12</div>
+                  <div className="text-2xl font-bold">{myModels.length}</div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    <span className="text-green-600 dark:text-green-400">+2</span> this week
+                    <span className="text-green-600 dark:text-green-400">
+                      {myModels.filter(m => !activeProofsByModel.has(m.id)).length}
+                    </span> ready
                   </p>
                 </CardContent>
               </Card>
@@ -289,9 +505,13 @@ export default function DashboardPage() {
                   <Clock className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">3</div>
+                  <div className="text-2xl font-bold">
+                    {proofJobs.filter(j => j.status === "PENDING" || j.status === "PROCESSING").length}
+                  </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    <span className="text-blue-600 dark:text-blue-400">2 generating</span>
+                    <span className="text-blue-600 dark:text-blue-400">
+                      {proofJobs.filter(j => j.status === "PROCESSING").length} generating
+                    </span>
                   </p>
                 </CardContent>
               </Card>
@@ -306,9 +526,13 @@ export default function DashboardPage() {
                   <CheckCircle className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">156</div>
+                  <div className="text-2xl font-bold">
+                    {proofJobs.filter(j => j.status === "COMPLETED").length}
+                  </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    <span className="text-green-600 dark:text-green-400">+18</span> today
+                    <span className="text-red-600 dark:text-red-400">
+                      {proofJobs.filter(j => j.status === "FAILED").length}
+                    </span> failed
                   </p>
                 </CardContent>
               </Card>
@@ -323,9 +547,19 @@ export default function DashboardPage() {
                   <TrendingUp className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">98.7%</div>
+                  <div className="text-2xl font-bold">
+                    {proofJobs.length > 0 
+                      ? ((proofJobs.filter(j => j.status === "COMPLETED").length / proofJobs.length) * 100).toFixed(1)
+                      : "0.0"}%
+                  </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    <span className="text-green-600 dark:text-green-400">+0.3%</span> improvement
+                    {proofJobs.length > 0 ? (
+                      <span className="text-muted-foreground">
+                        {proofJobs.length} total jobs
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">No jobs yet</span>
+                    )}
                   </p>
                 </CardContent>
               </Card>
@@ -361,22 +595,83 @@ export default function DashboardPage() {
             </div>
           </motion.div>
 
+          {/* My Models Table */}
+          <motion.div variants={itemVariants}>
+            <div className="rounded-2xl border border-border/30 bg-card/70 backdrop-blur-md p-6">
+              <div className="mb-6 flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold mb-2">My Models</h2>
+                  <p className="text-sm text-muted-foreground">
+                    View and manage your uploaded models. Generate ZK proofs for verification.
+                  </p>
+                </div>
+                {!loadingModels && myModels.length > 0 && (
+                  <button
+                    onClick={() => setShowUploadModal(true)}
+                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2"
+                  >
+                    <Upload className="h-4 w-4" />
+                    Upload New Model
+                  </button>
+                )}
+              </div>
+              
+              {loadingModels ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : myModels.length === 0 ? (
+                <div className="text-center py-12">
+                  <Database className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-muted-foreground mb-4">No models uploaded yet</p>
+                  <button
+                    onClick={() => setShowUploadModal(true)}
+                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                  >
+                    Upload Your First Model
+                  </button>
+                </div>
+              ) : (
+                <ModelsTable
+                  models={myModels.map(m => ({ ...m, hasActiveProof: activeProofsByModel.has(m.id) }))}
+                  onGenerateProof={handleGenerateProof}
+                  generatingProofId={generatingProof}
+                />
+              )}
+            </div>
+          </motion.div>
+
           {/* Active Proof Jobs Table */}
           <motion.div variants={itemVariants}>
             <div className="rounded-2xl border border-border/30 bg-card/70 backdrop-blur-md p-6">
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold mb-2">Active Proof Jobs</h2>
-                <p className="text-sm text-muted-foreground">
-                  Monitor and manage your ongoing zkML proof generation tasks
-                </p>
+              <div className="mb-6 flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold mb-2">Active Proof Jobs</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Real-time monitoring of your zkML proof generation tasks
+                  </p>
+                </div>
+                {!loadingJobs && proofJobs.length > 0 && (
+                  <button
+                    onClick={fetchAllData}
+                    className="px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-muted/80 transition-colors flex items-center gap-2"
+                  >
+                    <Clock className="h-4 w-4" />
+                    Refresh
+                  </button>
+                )}
               </div>
-              <LeadsTable
-                leads={sampleProofJobs}
-                onLeadAction={(leadId, action) => {
-                  // TODO: Implement proof job action handlers
-                  showToast(`${action} action for proof job ${leadId} - Feature coming soon!`, "info");
-                }}
-              />
+              
+              {loadingJobs ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : (
+                <ProofJobsTable
+                  proofJobs={proofJobs}
+                  onRefresh={fetchAllData}
+                />
+              )}
             </div>
           </motion.div>
 
@@ -431,6 +726,176 @@ export default function DashboardPage() {
           </motion.div>
         </motion.div>
       </div>
-    </BeamsBackground>
+
+      {/* Upload Modal */}
+      <AnimatePresence>
+        {showUploadModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => !uploading && setShowUploadModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-card/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-border/50 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            >
+              <div className="p-8">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold">Upload Model</h2>
+                  <button
+                    onClick={() => !uploading && setShowUploadModal(false)}
+                    disabled={uploading}
+                    className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                  >
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* File Upload Area */}
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-muted-foreground mb-2">
+                    Model File *
+                  </label>
+                  <div
+                    className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
+                      uploadFile 
+                        ? 'border-green-500 bg-green-50/10' 
+                        : 'border-border hover:border-primary/50 bg-muted/20'
+                    }`}
+                  >
+                    {uploadFile ? (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <FileCheck className="w-8 h-8 text-green-600" />
+                          <div className="text-left">
+                            <p className="font-medium text-foreground">{uploadFile.name}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {(uploadFile.size / 1024 / 1024).toFixed(2)} MB
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setUploadFile(null)}
+                          disabled={uploading}
+                          className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                        >
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                        <p className="text-foreground mb-2">Drag and drop your model file here</p>
+                        <p className="text-sm text-muted-foreground mb-4">or</p>
+                        <label className="inline-block px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 cursor-pointer transition-colors">
+                          Browse Files
+                          <input
+                            type="file"
+                            onChange={handleFileSelect}
+                            disabled={uploading}
+                            className="hidden"
+                            accept=".onnx,.pt,.pth,.pb,.h5"
+                          />
+                        </label>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Form Fields */}
+                {uploadFile && (
+                  <div className="space-y-4 mb-6">
+                    <div>
+                      <label className="block text-sm font-medium text-muted-foreground mb-2">
+                        Model Name *
+                      </label>
+                      <input
+                        type="text"
+                        value={modelName}
+                        onChange={(e) => setModelName(e.target.value)}
+                        disabled={uploading}
+                        className="w-full px-4 py-2 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50"
+                        placeholder="My AI Model"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-muted-foreground mb-2">
+                        Model Type *
+                      </label>
+                      <select
+                        value={modelType}
+                        onChange={(e) => setModelType(e.target.value as any)}
+                        disabled={uploading}
+                        className="w-full px-4 py-2 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50"
+                      >
+                        <option value="onnx">ONNX</option>
+                        <option value="pytorch">PyTorch</option>
+                        <option value="tensorflow">TensorFlow</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-muted-foreground mb-2">
+                        Description
+                      </label>
+                      <textarea
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        disabled={uploading}
+                        rows={3}
+                        className="w-full px-4 py-2 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50"
+                        placeholder="Describe your model..."
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                {uploadFile && (
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => !uploading && setShowUploadModal(false)}
+                      disabled={uploading}
+                      className="flex-1 px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-muted/80 transition-colors disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleUploadModel}
+                      disabled={!modelName || uploading}
+                      className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground transition-colors font-medium"
+                    >
+                      {uploading ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                          Uploading...
+                        </span>
+                      ) : (
+                        'Upload Model'
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                <p className="mt-4 text-xs text-muted-foreground text-center">
+                  Supported formats: ONNX, PyTorch (.pt, .pth), TensorFlow (.pb, .h5)
+                </p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      </div>
+    </div>
   );
 }

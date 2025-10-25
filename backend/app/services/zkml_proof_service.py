@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Dict, Any, Tuple, Optional
 from datetime import datetime
 import asyncio
+import logging
 from fastapi import HTTPException, status
 
 from app.core.config import settings
@@ -18,6 +19,9 @@ from app.utils.ezkl_helper import (
     sync_prove,
     sync_verify
 )
+from app.utils.onnx_fixer import fix_onnx_model, validate_onnx_for_ezkl, get_model_info
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -107,6 +111,33 @@ class ZKMLProofService:
         
         try:
             loop = asyncio.get_event_loop()
+            
+            # Step 0: Validate and fix ONNX model
+            print("Step 0: Validating ONNX model...")
+            is_valid, issues = validate_onnx_for_ezkl(model_path)
+            
+            if not is_valid:
+                logger.warning(f"Model validation issues found: {issues}")
+                print(f"⚠️  Model has compatibility issues, attempting to fix...")
+                
+                # Try to fix the model
+                try:
+                    fixed_model_path = proof_dir / f"fixed_{model_path.name}"
+                    fixed_path = await loop.run_in_executor(
+                        None, 
+                        fix_onnx_model, 
+                        model_path, 
+                        fixed_model_path
+                    )
+                    logger.info(f"Model fixed successfully, using {fixed_path}")
+                    print(f"✅ Model fixed, using fixed version")
+                    model_path = fixed_path
+                except Exception as fix_error:
+                    logger.error(f"Failed to fix model: {fix_error}")
+                    print(f"❌ Failed to fix model: {fix_error}")
+                    # Continue with original model, might still work
+            else:
+                print("✅ Model is EZKL-compatible")
             
             # Step 1: Generate initial settings
             print("Step 1: Generating settings...")
