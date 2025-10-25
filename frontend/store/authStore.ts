@@ -34,10 +34,6 @@ export const useAuthStore = create<AuthStore>()(
           localStorage.setItem('accessToken', tokens.access_token);
           localStorage.setItem('refreshToken', tokens.refresh_token);
           
-          // Also set in cookies for middleware
-          document.cookie = `accessToken=${tokens.access_token}; path=/; max-age=86400; SameSite=Lax`;
-          document.cookie = `refreshToken=${tokens.refresh_token}; path=/; max-age=604800; SameSite=Lax`;
-          
           // Fetch user info
           const user = await authApi.getCurrentUser();
           
@@ -91,10 +87,6 @@ export const useAuthStore = create<AuthStore>()(
         localStorage.setItem('accessToken', accessToken);
         localStorage.setItem('refreshToken', refreshToken);
         
-        // Also set in cookies for middleware
-        document.cookie = `accessToken=${accessToken}; path=/; max-age=86400; SameSite=Lax`;
-        document.cookie = `refreshToken=${refreshToken}; path=/; max-age=604800; SameSite=Lax`;
-        
         set({ accessToken, refreshToken, isAuthenticated: true });
       },
 
@@ -140,10 +132,6 @@ export const useAuthStore = create<AuthStore>()(
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
         localStorage.removeItem('user');
-        
-        // Clear cookies
-        document.cookie = 'accessToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-        document.cookie = 'refreshToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
         
         set({
           user: null,
