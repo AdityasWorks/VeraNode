@@ -28,6 +28,15 @@
   --color-border: #e4e4e7;
   --color-input: #e4e4e7;
   --color-ring: #0a0a0a;
+  
+  /* Checkbox colors - light mode */
+  --color-gray-100: hsl(0, 0%, 95%);
+  --color-gray-200: hsl(0, 0%, 92%);
+  --color-gray-500: hsl(0, 0%, 79%);
+  --color-gray-600: hsl(0, 0%, 66%);
+  --color-gray-700: hsl(0, 0%, 56%);
+  --color-gray-1000: hsl(0, 0%, 9%);
+  --color-background-100: hsl(0, 0%, 100%);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -49,6 +58,15 @@
     --color-border: #27272a;
     --color-input: #27272a;
     --color-ring: #d4d4d8;
+    
+    /* Checkbox colors - dark mode */
+    --color-gray-100: hsl(0, 0%, 10%);
+    --color-gray-200: hsl(0, 0%, 12%);
+    --color-gray-500: hsl(0, 0%, 27%);
+    --color-gray-600: hsl(0, 0%, 53%);
+    --color-gray-700: hsl(0, 0%, 56%);
+    --color-gray-1000: hsl(0, 0%, 93%);
+    --color-background-100: hsl(0, 0%, 4%);
   }
 }
 
