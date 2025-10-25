@@ -297,6 +297,7 @@ export function HeroSection() {
 const menuItems = [
     { name: 'Features', href: '#features' },
     { name: 'Platform', href: '#platform' },
+    { name: 'Dashboard', href: '/dashboard' },
     { name: 'Documentation', href: '#docs' },
     { name: 'About', href: '#about' },
 ]
@@ -387,11 +388,11 @@ const HeroHeader = () => {
                                             size="sm"
                                             onClick={handleDashboard}
                                             className={cn(isScrolled && 'lg:hidden')}>
-                                            <User className="size-4 mr-2" />
+                                            <User className="size-4 mr-2 text-primary" />
                                             <span>{user?.username || 'Dashboard'}</span>
                                         </Button>
                                         <Button
-                                            variant="destructive"
+                                            variant="outline"
                                             size="sm"
                                             onClick={handleLogout}
                                             className={cn(isScrolled && 'lg:hidden')}>
