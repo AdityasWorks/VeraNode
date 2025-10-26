@@ -18,11 +18,17 @@ async def register_model(
     version: str = Query("1.0.0", description="Model version (semver format)"),
     model_type: str = Query(..., description="Model type: onnx, pytorch, or tensorflow"),
     is_public: bool = Query(False, description="Make model publicly accessible"),
+    replace_existing: bool = Query(False, description="Replace existing model with same name if it exists"),
     file: UploadFile = File(..., description="Model file to upload"),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-
+    """
+    Register a new model or replace an existing one.
+    
+    - **replace_existing**: If True and a model with the same name exists, 
+      it will be deleted and replaced with the new upload.
+    """
     # Create model data object
     model_data = ModelCreate(
         name=name,
@@ -37,7 +43,8 @@ async def register_model(
         model_data=model_data,
         file=file,
         owner=current_user,
-        db=db
+        db=db,
+        replace_existing=replace_existing
     )
     
     return model

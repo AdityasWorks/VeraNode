@@ -6,6 +6,7 @@ from sqlalchemy import select, func
 from fastapi import HTTPException, status, UploadFile
 import aiofiles
 import os
+import logging
 
 from app.models.model_registry import ModelRegistry
 from app.models.user import User
@@ -18,7 +19,10 @@ from app.utils.crypto import (
 )
 from app.utils.model_validator import ModelValidator
 
+logger = logging.getLogger(__name__)
 
+
+class ModelRegistryService:
 class ModelRegistryService:
     """Service for managing AI model registration and storage."""
     
@@ -51,21 +55,46 @@ class ModelRegistryService:
         model_data: ModelCreate,
         file: UploadFile,
         owner: User,
-        db: AsyncSession
+        db: AsyncSession,
+        replace_existing: bool = False
     ) -> ModelRegistry:
-
+        """
+        Register a new model or replace an existing one.
+        
+        Args:
+            replace_existing: If True, delete existing model with same name before uploading
+        """
         # Check if model with same name and owner exists
+        # This allows different users to have models with the same name
         result = await db.execute(
             select(ModelRegistry).where(
                 ModelRegistry.name == model_data.name,
                 ModelRegistry.owner_id == owner.id
             )
         )
-        if result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Model '{model_data.name}' already exists for this user"
-            )
+        existing_model = result.scalar_one_or_none()
+        
+        if existing_model:
+            if replace_existing:
+                # Delete the existing model and its files
+                try:
+                    await ModelRegistryService.delete_model(
+                        model_id=existing_model.id,
+                        current_user=owner,
+                        db=db
+                    )
+                    logger.info(f"Replaced existing model '{model_data.name}' (ID: {existing_model.id})")
+                except Exception as e:
+                    logger.error(f"Failed to delete existing model for replacement: {e}")
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"Failed to replace existing model: {str(e)}"
+                    )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"You already have a model named '{model_data.name}'. Choose a different name or use replace_existing=true to update it."
+                )
         
         # Validate file extension matches model type
         file_ext = ModelValidator.get_file_extension(file.filename)
@@ -128,11 +157,16 @@ class ModelRegistryService:
                 detail=f"Failed to compute model hash: {str(e)}"
             )
         
-        # Check if hash already exists (duplicate model)
+        # Check if same user already has uploaded this exact model file
+        # Different users CAN upload the same model file (only checks current user)
         result = await db.execute(
-            select(ModelRegistry).where(ModelRegistry.model_hash == model_hash)
+            select(ModelRegistry).where(
+                ModelRegistry.model_hash == model_hash,
+                ModelRegistry.owner_id == owner.id
+            )
         )
-        if result.scalar_one_or_none():
+        existing_model = result.scalar_one_or_none()
+        if existing_model:
             # Clean up duplicate file
             try:
                 os.remove(file_path)
@@ -140,7 +174,7 @@ class ModelRegistryService:
                 pass
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="A model with identical weights already exists in the registry"
+                detail=f"You've already uploaded this exact model file as '{existing_model.name}'. If you want to keep both, please modify the model slightly or use the existing one."
             )
         
         # Create database entry
