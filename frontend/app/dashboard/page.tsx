@@ -17,7 +17,10 @@ import {
   ArrowDownLeftFromSquare,
   ClipboardList,
   LogOut,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
+import { apiService } from "@/lib/apiService";
 import { MarketingDashboard } from "@/components/ui/dashboard-stats";
 import { LeadsTable } from "@/components/ui/leads-data-table";
 import { QuickLinksCard } from "@/components/ui/quick-actions-card";
@@ -142,10 +145,24 @@ export default function DashboardPage() {
   const [proofJobs, setProofJobs] = useState<ProofJob[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
   const [activeProofsByModel, setActiveProofsByModel] = useState<Set<number>>(new Set());
+  const [backendMode, setBackendMode] = useState<'backend' | 'mock'>('backend');
 
   useEffect(() => {
     checkAuth();
-  }, [checkAuth]);
+    
+    // Set access token for API service
+    if (accessToken) {
+      apiService.setAccessToken(accessToken);
+    }
+    
+    // Check backend status
+    apiService.getBackendStatus().then(status => {
+      setBackendMode(status.mode);
+      if (status.mode === 'mock') {
+        showToast("⚠️ Backend unavailable - Using demo mode with mock data", "info");
+      }
+    });
+  }, [checkAuth, accessToken, showToast]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -159,41 +176,21 @@ export default function DashboardPage() {
   };
 
   const handleUploadModel = async () => {
-    if (!uploadFile || !modelName || !accessToken) {
+    if (!uploadFile || !modelName) {
       showToast("Please fill in all required fields", "error");
       return;
     }
 
     setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append('file', uploadFile);
+      const model = await apiService.registerModel({
+        name: modelName,
+        description: description || '',
+        model_type: modelType,
+        version: '1.0.0',
+        file: uploadFile,
+      });
 
-      const response = await fetch(
-        `http://localhost:8000/api/v1/models/register?name=${encodeURIComponent(modelName)}&model_type=${modelType}&version=1.0.0&description=${encodeURIComponent(description || '')}`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-          },
-          body: formData,
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        
-        // Handle duplicate model error specifically
-        if (error.detail?.includes("already exists")) {
-          showToast(`Model "${modelName}" already exists. Try a different name or version.`, "error");
-        } else {
-          showToast(error.detail || 'Upload failed', "error");
-        }
-        setUploading(false);
-        return;
-      }
-
-      const model = await response.json();
       showToast(`✓ Model "${modelName}" uploaded successfully!`, "success");
       
       // Reset form and refresh model list
@@ -226,16 +223,8 @@ export default function DashboardPage() {
   // Fetch user's models
   const fetchMyModels = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/models/my-models', {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setMyModels(data.models || []);
-      }
+      const data = await apiService.getMyModels();
+      setMyModels(data.models || []);
     } catch (error) {
       console.error('Failed to fetch models:', error);
     } finally {
@@ -246,37 +235,27 @@ export default function DashboardPage() {
   // Fetch user's proof jobs
   const fetchProofJobs = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/verification/my-proofs', {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-        },
+      const jobs: ProofJob[] = await apiService.getMyProofs();
+      
+      // Enrich jobs with model names
+      const enrichedJobs = jobs.map(job => {
+        const model = myModels.find(m => m.id === job.model_id);
+        return {
+          ...job,
+          model_name: model?.name || job.model_name || `Model #${job.model_id}`,
+        };
       });
-
-      if (response.ok) {
-        const jobs: ProofJob[] = await response.json();
-        
-        // Enrich jobs with model names
-        const enrichedJobs = await Promise.all(
-          jobs.map(async (job) => {
-            const model = myModels.find(m => m.id === job.model_id);
-            return {
-              ...job,
-              model_name: model?.name || `Model #${job.model_id}`,
-            };
-          })
-        );
-        
-        setProofJobs(enrichedJobs);
-        
-        // Track which models have active proofs
-        const activeModels = new Set<number>();
-        enrichedJobs.forEach(job => {
-          if (job.status === "PENDING" || job.status === "PROCESSING") {
-            activeModels.add(job.model_id);
-          }
-        });
-        setActiveProofsByModel(activeModels);
-      }
+      
+      setProofJobs(enrichedJobs);
+      
+      // Track which models have active proofs
+      const activeModels = new Set<number>();
+      enrichedJobs.forEach(job => {
+        if (job.status === "PENDING" || job.status === "PROCESSING") {
+          activeModels.add(job.model_id);
+        }
+      });
+      setActiveProofsByModel(activeModels);
     } catch (error) {
       console.error('Failed to fetch proof jobs:', error);
     } finally {
@@ -302,28 +281,11 @@ export default function DashboardPage() {
     try {
       // For now, use dummy input data - in production this should be collected from user
       const proofData = {
-        model_id: modelId,
-        input_data: {
-          dummy: true,
-          note: "Sample input for proof generation"
-        }
+        input: [[1.0, 2.0, 3.0]], // Sample input compatible with backend
+        note: "Sample input for proof generation"
       };
 
-      const response = await fetch(`http://localhost:8000/api/v1/verification/generate-proof`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(proofData),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Proof generation failed');
-      }
-
-      const result = await response.json();
+      const result = await apiService.generateProof(modelId, proofData);
       showToast(`✓ Proof generation started! Job ID: ${result.id}`, "success");
       
       // Refresh data immediately
@@ -451,6 +413,15 @@ export default function DashboardPage() {
               <p className="hidden sm:block text-sm text-muted-foreground">
                 Welcome back, <span className="font-medium text-foreground">{user.username}</span>
               </p>
+              {backendMode === 'mock' && (
+                <>
+                  <div className="hidden sm:block h-6 w-px bg-border/50" />
+                  <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20">
+                    <WifiOff className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                    <span className="text-xs font-medium text-amber-600 dark:text-amber-400">Demo Mode</span>
+                  </div>
+                </>
+              )}
             </div>
             <motion.button
               onClick={handleLogout}

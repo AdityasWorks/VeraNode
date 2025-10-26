@@ -6,6 +6,8 @@ import { useAuthStore } from "@/store/authStore";
 import { useToast } from "@/components/ui/toast-provider";
 import { AuthUI } from "@/components/ui/auth-fuse";
 import { UserRole } from "@/types/auth";
+import { MOCK_CREDENTIALS } from "@/lib/mockAuth";
+import { Info } from "lucide-react";
 
 interface ApiErrorDetail {
   msg?: string;
@@ -132,6 +134,28 @@ export default function AuthPage() {
           </button>
         </div>
       )}
+      
+      {/* Demo Credentials Banner */}
+      <div className="fixed top-4 left-4 z-50 max-w-sm rounded-lg bg-blue-500/90 backdrop-blur-sm p-4 text-white shadow-xl border border-blue-400/50">
+        <div className="flex items-start gap-3">
+          <Info className="h-5 w-5 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold mb-2">Demo Mode Active</p>
+            <p className="text-sm text-blue-100 mb-2">Backend unavailable. Use these credentials:</p>
+            <div className="space-y-2 text-sm">
+              <div className="bg-blue-600/30 rounded px-2 py-1">
+                <p className="font-mono text-blue-100">{MOCK_CREDENTIALS.demo.email}</p>
+                <p className="font-mono text-blue-100">{MOCK_CREDENTIALS.demo.password}</p>
+              </div>
+              <div className="bg-blue-600/30 rounded px-2 py-1">
+                <p className="font-mono text-blue-100">{MOCK_CREDENTIALS.admin.email}</p>
+                <p className="font-mono text-blue-100">{MOCK_CREDENTIALS.admin.password}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
       <AuthUI
         onSignIn={handleSignIn}
         onSignUp={handleSignUp}
