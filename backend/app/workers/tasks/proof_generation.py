@@ -34,12 +34,18 @@ SyncSession = sessionmaker(bind=sync_engine)
     retry_backoff=True,
     retry_backoff_max=600,  # Max 10 minutes
     retry_jitter=True,
-    max_retries=3,
+    max_retries=2,  # Reduced from 3 to 2
     acks_late=True,
+    time_limit=1800,  # Hard limit: 30 minutes
+    soft_time_limit=1500,  # Soft limit: 25 minutes (raises exception)
 )
 def generate_zkml_proof_task(self, proof_job_id: int):
-
+    """
+    Generate a ZK-ML proof for the given proof job.
+    Includes timeout protection and better error handling.
+    """
     db = SyncSession()
+    proof_job = None
     
     try:
         # Update job status to processing
@@ -57,12 +63,21 @@ def generate_zkml_proof_task(self, proof_job_id: int):
                 "proof_path": proof_job.proof_path
             }
         
+        # Check if stuck in processing (crash recovery)
+        if proof_job.status == ProofStatus.PROCESSING and proof_job.started_at:
+            from datetime import timedelta
+            time_stuck = datetime.utcnow() - proof_job.started_at
+            if time_stuck > timedelta(minutes=35):  # Longer than timeout
+                logger.warning(f"Job {proof_job_id} was stuck, restarting")
+                proof_job.started_at = datetime.utcnow()
+        
         proof_job.status = ProofStatus.PROCESSING
-        proof_job.started_at = datetime.utcnow()
+        if not proof_job.started_at:
+            proof_job.started_at = datetime.utcnow()
         proof_job.celery_task_id = self.request.id
         db.commit()
         
-        logger.info(f"Starting proof generation for job {proof_job_id} (attempt {self.request.retries + 1})")
+        logger.info(f"🚀 Starting proof generation for job {proof_job_id} (attempt {self.request.retries + 1}/{self.max_retries})")
         
         # Load model
         model = db.query(ModelRegistry).filter(ModelRegistry.id == proof_job.model_id).first()
@@ -84,6 +99,13 @@ def generate_zkml_proof_task(self, proof_job_id: int):
         if not input_path.exists():
             logger.error(f"Input data not found: {input_path}")
             raise FileNotFoundError(f"Input data not found: {input_path}")
+        
+        # Validate input data is not empty
+        import json
+        with open(input_path, 'r') as f:
+            input_data = json.load(f)
+            if not input_data.get('input_data'):
+                raise ValueError("Input data is empty. Please provide valid input data.")
         
         # Generate proof using asyncio
         loop = asyncio.new_event_loop()
@@ -155,6 +177,56 @@ def generate_zkml_proof_task(self, proof_job_id: int):
             "status": "failed",
             "error": str(e),
         }
+        
+    finally:
+        db.close()
+
+
+@celery_app.task(name="cleanup_stuck_proofs")
+def cleanup_stuck_proofs_task():
+    """
+    Clean up proof jobs that are stuck in PROCESSING or PENDING state.
+    This runs periodically to handle crashed workers.
+    """
+    logger.info("Starting stuck proof jobs cleanup task")
+    
+    from datetime import timedelta
+    
+    db = SyncSession()
+    
+    try:
+        cutoff_time = datetime.utcnow() - timedelta(minutes=35)  # Longer than timeout
+        
+        # Find stuck jobs
+        stuck_jobs = db.query(ProofJob).filter(
+            ProofJob.status.in_([ProofStatus.PROCESSING, ProofStatus.PENDING]),
+            ProofJob.started_at < cutoff_time
+        ).all()
+        
+        cleaned_count = 0
+        
+        for job in stuck_jobs:
+            try:
+                job.status = ProofStatus.FAILED
+                job.error_message = "Task timeout: Proof generation took too long or worker crashed"
+                job.completed_at = datetime.utcnow()
+                cleaned_count += 1
+                logger.info(f"Marked stuck proof job {job.id} as FAILED")
+            except Exception as e:
+                logger.error(f"Failed to cleanup stuck job {job.id}: {e}")
+                continue
+        
+        db.commit()
+        
+        logger.info(f"✅ Stuck jobs cleanup completed: {cleaned_count} jobs marked as failed")
+        
+        return {
+            "cleaned_count": cleaned_count,
+        }
+        
+    except Exception as e:
+        logger.error(f"Stuck jobs cleanup task failed: {e}", exc_info=True)
+        raise
         
     finally:
         db.close()

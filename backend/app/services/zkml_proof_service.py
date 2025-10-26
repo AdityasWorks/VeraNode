@@ -42,8 +42,28 @@ class ZKMLProofService:
         
         # Convert input data to EZKL format
         # EZKL expects format: {"input_data": [[values]]}
+        # Accept multiple input formats: "input_data", "input", "data", or raw values
+        input_values = None
+        
+        if "input_data" in input_data:
+            input_values = input_data["input_data"]
+        elif "input" in input_data:
+            input_values = input_data["input"]
+        elif "data" in input_data:
+            input_values = input_data["data"]
+        else:
+            # If no recognized key, try to use the values directly
+            # This handles cases where the entire dict is the input
+            if input_data:
+                values = list(input_data.values())
+                if values:
+                    input_values = values[0]
+        
+        if input_values is None:
+            input_values = []
+            
         ezkl_input = {
-            "input_data": input_data.get("input_data", []),
+            "input_data": input_values,
         }
         
         if "output_data" in input_data:

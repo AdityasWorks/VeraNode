@@ -66,4 +66,8 @@ celery_app.conf.beat_schedule = {
         'schedule': crontab(hour=2, minute=0),  # Run daily at 2 AM
         'args': (7,),  # Delete proofs older than 7 days
     },
+    'cleanup-stuck-proofs': {
+        'task': 'cleanup_stuck_proofs',
+        'schedule': 300.0,  # Run every 5 minutes
+    },
 }
